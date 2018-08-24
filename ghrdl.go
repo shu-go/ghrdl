@@ -59,7 +59,6 @@ func (g globalCmd) Run() error {
 		return fmt.Errorf("download %v: %v", dlurl, err)
 	}
 	defer resp.Body.Close()
-	contentLength := resp.ContentLength
 
 	// mkdir
 	os.MkdirAll(g.Dir, os.ModePerm)
@@ -70,19 +69,15 @@ func (g globalCmd) Run() error {
 		return fmt.Errorf("create a file %v: %v", filepath.Join(g.Dir, path.Base(dlurl)), err)
 	}
 	defer file.Close()
-	prevprog := 0
-	_, err = io.Copy(
-		file,
-		progio.NewReader(
-			resp.Body,
-			func(p int64) {
-				prog := int(float64(p) / float64(contentLength) * 100 / 5)
-				if prog != prevprog {
-					fmt.Printf("%d%%  ", prog*5)
-					prevprog = prog
-				}
-			},
-		))
+
+	progreader := progio.NewReader(
+		resp.Body,
+		func(p int64) {
+			fmt.Printf("%d%%  ", p)
+		},
+		progio.Percent(resp.ContentLength, 5),
+	)
+	_, err = io.Copy(file, progreader)
 	if err != nil {
 		return fmt.Errorf("copy content: %v", err)
 	}
