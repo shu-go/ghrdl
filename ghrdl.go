@@ -76,7 +76,7 @@ func (g globalCmd) Run() error {
 	progreader := progio.NewReader(
 		resp.Body,
 		func(p int64) {
-			fmt.Printf("%d%%  ", p)
+			fmt.Printf("-%02d%%-", p)
 		},
 		progio.Percent(resp.ContentLength, 5),
 	)
