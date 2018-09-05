@@ -61,7 +61,10 @@ func (g globalCmd) Run() error {
 	defer resp.Body.Close()
 
 	// mkdir
-	os.MkdirAll(g.Dir, os.ModePerm)
+	err = os.MkdirAll(g.Dir, os.ModePerm)
+	if err != nil {
+		return fmt.Errorf("create directories: %v", err)
+	}
 
 	// store
 	file, err := os.Create(filepath.Join(g.Dir, path.Base(dlurl)))
