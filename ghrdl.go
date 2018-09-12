@@ -16,6 +16,7 @@ import (
 	"bitbucket.org/shu_go/gli"
 	"bitbucket.org/shu_go/progio"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/schollz/progressbar"
 )
 
 const (
@@ -73,13 +74,16 @@ func (g globalCmd) Run() error {
 	}
 	defer file.Close()
 
+	bar := progressbar.New(100)
+
 	progreader := progio.NewReader(
 		resp.Body,
 		func(p int64) {
-			fmt.Printf("-%02d%%-", p)
+			bar.Add(1)
 		},
-		progio.Percent(resp.ContentLength, 5),
+		progio.Percent(resp.ContentLength, 1),
 	)
+
 	_, err = io.Copy(file, progreader)
 	if err != nil {
 		return fmt.Errorf("copy content: %v", err)
