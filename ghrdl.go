@@ -16,6 +16,7 @@ import (
 	"bitbucket.org/shu_go/gli"
 	"bitbucket.org/shu_go/progio"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/gen2brain/beeep"
 	"github.com/schollz/progressbar"
 )
 
@@ -27,6 +28,7 @@ type globalCmd struct {
 	URL     string `help:"Github releases page"`
 	Pattern string `help:"href pattern that contains '(?P<version>)'"`
 	Dir     string `help:"download dest and version storage dir"      default:"."`
+	Title   string `help:"notification title"`
 	version string
 }
 
@@ -34,6 +36,10 @@ func (g *globalCmd) Before() {
 	content, err := ioutil.ReadFile(filepath.Join(g.Dir, versionFile))
 	if err == nil {
 		g.version = strings.TrimSpace(string(content))
+	}
+
+	if g.Title == "" {
+		g.Title = g.Dir
 	}
 }
 
@@ -90,8 +96,16 @@ func (g globalCmd) Run() error {
 	}
 
 	err = ioutil.WriteFile(filepath.Join(g.Dir, versionFile), []byte(dlver), os.ModePerm)
+	if err != nil {
+		return err
+	}
 
-	return err
+	err = beeep.Notify("ghrdl", "Downloaded", "" /*"assets/information.png"*/)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func isNewer(curr, dl string) bool {
