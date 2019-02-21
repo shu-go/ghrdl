@@ -104,6 +104,10 @@ func isNewer(curr, dl string) bool {
 }
 
 func resolveURL(base, relative string) string {
+	if strings.HasPrefix(relative, base) {
+		return relative
+	}
+
 	baseURL, err := url.Parse(base)
 	if err != nil {
 		return ""
