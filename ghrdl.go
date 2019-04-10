@@ -100,7 +100,7 @@ func (g globalCmd) Run() error {
 		return err
 	}
 
-	err = beeep.Notify("ghrdl", "Downloaded", "" /*"assets/information.png"*/)
+	err = beeep.Notify(g.Title+"(ghrdl)", "Downloaded", "" /*"assets/information.png"*/)
 	if err != nil {
 		return err
 	}
