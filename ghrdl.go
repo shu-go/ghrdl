@@ -13,11 +13,11 @@ import (
 	"regexp"
 	"strings"
 
-	"bitbucket.org/shu_go/gli"
-	"bitbucket.org/shu_go/progio"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/gen2brain/beeep"
 	"github.com/schollz/progressbar"
+	"github.com/shu-go/gli"
+	"github.com/shu-go/progio"
 )
 
 const (
