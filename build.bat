@@ -1,2 +1,2 @@
-go build -ldflags "-w -s" %*
+go build -trimpath -ldflags "-w -s" %*
 if errorlevel 1 pause
