@@ -42,11 +42,7 @@ type globalCmd struct {
 	Title   string `help:"notification title (default: --dir)"`
 }
 
-func (g globalCmd) Run(args []string) error {
-	if g.URL == "" && len(args) >= 1 {
-		g.URL = args[0]
-	}
-
+func (g globalCmd) Run() error {
 	u, err := url.Parse(g.URL)
 	if err != nil {
 		return err
