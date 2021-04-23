@@ -3,10 +3,10 @@ module github.com/shu-go/ghrdl
 go 1.13
 
 require (
-	github.com/PuerkitoBio/goquery v1.5.0
 	github.com/gen2brain/beeep v0.0.0-20190719094215-ece0cb67ca77
 	github.com/godbus/dbus v4.1.0+incompatible // indirect
 	github.com/gopherjs/gopherwasm v1.1.0 // indirect
+	github.com/mattn/go-scan v0.0.0-20200228002420-2250e6e52487
 	github.com/nu7hatch/gouuid v0.0.0-20131221200532-179d4d0c4d8d // indirect
 	github.com/schollz/progressbar v1.0.0
 	github.com/shu-go/gli v0.0.0-20191204015252-567feb8625c5
