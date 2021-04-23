@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -12,95 +13,167 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/gen2brain/beeep"
+	scan "github.com/mattn/go-scan"
 	"github.com/schollz/progressbar"
 	"github.com/shu-go/gli"
 	"github.com/shu-go/progio"
 )
+
+// Version is app version
+var Version string
+
+func init() {
+	if Version == "" {
+		Version = "dev-" + time.Now().Format("20060102")
+	}
+}
 
 const (
 	versionFile = "version"
 )
 
 type globalCmd struct {
-	URL     string `help:"Github releases page"`
-	Pattern string `help:"href pattern that contains '(?P<version>)'"`
-	Dir     string `help:"download dest and version storage dir"      default:"."`
-	Title   string `help:"notification title"`
-	version string
+	URL     string `help:"a URL of GitHub Releases page"`
+	Pattern string `help:"href pattern filter"`
+	Dir     string `help:"download dest and version storage dir (default: ./{repos}"`
+	Title   string `help:"notification title (default: --dir)"`
 }
 
-func (g *globalCmd) Before() {
-	content, err := ioutil.ReadFile(filepath.Join(g.Dir, versionFile))
-	if err == nil {
-		g.version = strings.TrimSpace(string(content))
+func (g globalCmd) Run(args []string) error {
+	if g.URL == "" && len(args) >= 1 {
+		g.URL = args[0]
 	}
 
-	if g.Title == "" {
-		g.Title = g.Dir
-	}
-}
-
-func (g globalCmd) Run() error {
-	dlurl, dlver, err := findFileURL(g.URL, g.Pattern)
-	if err != nil {
-		return fmt.Errorf("scrape ghr: %v", err)
-	}
-
-	// test you should download a file
-
-	if !isNewer(g.version, dlver) {
-		fmt.Println("no new release")
-		return nil
-	}
-
-	dlurl = resolveURL(g.URL, dlurl)
-	fmt.Printf("downloading %s ...\n", dlurl)
-
-	// fetch the file
-
-	resp, err := http.Get(dlurl)
-	if err != nil {
-		return fmt.Errorf("download %v: %v", dlurl, err)
-	}
-	defer resp.Body.Close()
-
-	// mkdir
-	err = os.MkdirAll(g.Dir, os.ModePerm)
-	if err != nil {
-		return fmt.Errorf("create directories: %v", err)
-	}
-
-	// store
-	file, err := os.Create(filepath.Join(g.Dir, path.Base(dlurl)))
-	if err != nil {
-		return fmt.Errorf("create a file %v: %v", filepath.Join(g.Dir, path.Base(dlurl)), err)
-	}
-	defer file.Close()
-
-	bar := progressbar.New(100)
-
-	progreader := progio.NewReader(
-		resp.Body,
-		func(p int64) {
-			bar.Add(1)
-		},
-		progio.Percent(resp.ContentLength, 1),
-	)
-
-	_, err = io.Copy(file, progreader)
-	if err != nil {
-		return fmt.Errorf("copy content: %v", err)
-	}
-
-	err = ioutil.WriteFile(filepath.Join(g.Dir, versionFile), []byte(dlver), os.ModePerm)
+	u, err := url.Parse(g.URL)
 	if err != nil {
 		return err
 	}
 
-	err = beeep.Notify(g.Title+"(ghrdl)", "Downloaded", "" /*"assets/information.png"*/)
+	if !strings.HasPrefix(u.Scheme, "http") {
+		return errors.New("invalid url")
+	}
+
+	pp := strings.Split(u.Path, "/")
+	if len(pp) < 3 {
+		return errors.New("invalid url")
+	}
+
+	owner := pp[1]
+	repos := pp[2]
+
+	if g.Dir == "" {
+		g.Dir = filepath.Join(".", repos)
+	}
+	if g.Title == "" {
+		g.Title = g.Dir
+	}
+
+	var version string
+
+	content, err := ioutil.ReadFile(filepath.Join(g.Dir, versionFile))
+	if err == nil {
+		version = strings.TrimSpace(string(content))
+	}
+
+	lurl := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repos)
+	resp, err := http.Get(lurl)
+	if err != nil {
+		return err
+	}
+
+	// read body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+
+	var tagName string
+	err = scan.ScanJSON(bytes.NewBuffer(bodyBytes), "/tag_name", &tagName)
+	if err != nil {
+		return err
+	}
+
+	// test you should download a file
+
+	if !isNewer(version, tagName) {
+		fmt.Printf("no new release (%v)\n", tagName)
+		return nil
+	}
+	println(tagName)
+
+	// determine the path to download
+
+	var assets []map[string]interface{}
+	err = scan.ScanJSON(bytes.NewBuffer(bodyBytes), "assets", &assets)
+	if err != nil {
+		return err
+	}
+
+	var ptn *regexp.Regexp
+	if g.Pattern != "" {
+		ptn = regexp.MustCompile(g.Pattern)
+	}
+	for _, a := range assets {
+		dlurli, found := a["browser_download_url"]
+		if !found {
+			continue
+		}
+
+		dlurl := dlurli.(string)
+
+		if g.Pattern != "" && ptn.FindString(dlurl) == "" {
+			continue
+		}
+
+		// fetch the file
+
+		resp, err = http.Get(dlurl)
+		if err != nil {
+			return fmt.Errorf("download %v: %v", dlurl, err)
+		}
+		defer resp.Body.Close()
+
+		// mkdir
+		err = os.MkdirAll(g.Dir, os.ModePerm)
+		if err != nil {
+			return fmt.Errorf("create directories: %v", err)
+		}
+
+		// store
+		file, err := os.Create(filepath.Join(g.Dir, path.Base(dlurl)))
+		if err != nil {
+			return fmt.Errorf("create a file %v: %v", filepath.Join(g.Dir, path.Base(dlurl)), err)
+		}
+		defer file.Close()
+
+		bar := progressbar.New(100)
+
+		progreader := progio.NewReader(
+			resp.Body,
+			func(p int64) {
+				bar.Add(1)
+			},
+			progio.Percent(resp.ContentLength, 1),
+		)
+
+		_, err = io.Copy(file, progreader)
+		if err != nil {
+			return fmt.Errorf("copy content: %v", err)
+		}
+
+		break
+	}
+
+	err = ioutil.WriteFile(filepath.Join(g.Dir, versionFile), []byte(tagName), os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	err = beeep.Notify(g.Title+"(ghrdl)", tagName+" Downloaded", "" /*"assets/information.png"*/)
 	if err != nil {
 		return err
 	}
@@ -110,68 +183,15 @@ func (g globalCmd) Run() error {
 
 func isNewer(curr, dl string) bool {
 	return curr != dl
-	/*
-		sep := regexp.MustCompile("[^0-9a-zA-Z]")
-		currcomp := sep.Split(curr)
-		dlcomp := sep.Split(dl)
-	*/
-}
-
-func resolveURL(base, relative string) string {
-	if strings.HasPrefix(relative, base) {
-		return relative
-	}
-
-	baseURL, err := url.Parse(base)
-	if err != nil {
-		return ""
-	}
-
-	if strings.HasPrefix(relative, "/") {
-		return fmt.Sprintf("%s://%s%s", baseURL.Scheme, baseURL.Host, relative)
-	}
-	return path.Join(base, relative)
-}
-
-func findFileURL(url, pattern string) (fileURL, version string, err error) {
-	ptn := regexp.MustCompile(pattern)
-
-	// pattern check
-
-	veridx := 0
-	for i, n := range ptn.SubexpNames() {
-		if n == "version" {
-			veridx = i
-			break
-		}
-	}
-	if veridx == 0 {
-		return "", "", errors.New("(?P<version>...) is required")
-	}
-
-	// scraping Github releases page
-
-	doc, err := goquery.NewDocument(url)
-	if err != nil {
-		return "", "", fmt.Errorf("opening URL %v: %v", url, err)
-	}
-
-	// find first download link
-	var dlurl, dlver string
-	doc.Find("a").EachWithBreak(func(_ int, s *goquery.Selection) bool {
-		url, _ := s.Attr("href")
-		if subs := ptn.FindStringSubmatch(url); subs != nil {
-			dlurl = url
-			dlver = subs[veridx]
-			return false
-		}
-		return true
-	})
-
-	return dlurl, dlver, nil
 }
 
 func main() {
 	app := gli.NewWith(&globalCmd{})
+	app.Name = "ghrdl"
+	app.Desc = "Download GitHub Releases"
+	app.Version = Version
+	app.Usage = ``
+	app.Copyright = "(C) 2021 Shuhei Kubota"
 	app.Run(os.Args)
+
 }
