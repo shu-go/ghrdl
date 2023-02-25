@@ -10,5 +10,5 @@ require (
 	github.com/schollz/progressbar v1.0.0
 	github.com/shu-go/gli v1.5.5
 	github.com/shu-go/progio v0.0.0-20190822042334-2f5cf6a8a04c
-	golang.org/x/sys v0.0.0-20220224003255-dbe011f71a99 // indirect
+	golang.org/x/sys v0.1.0 // indirect
 )
