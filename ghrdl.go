@@ -106,6 +106,7 @@ func (g globalCmd) Run() error {
 
 	// determine the path to download
 
+	var timestampStr string
 	var assets []map[string]interface{}
 	err = scan.ScanJSON(bytes.NewBuffer(bodyBytes), "assets", &assets)
 	if err != nil {
@@ -118,11 +119,13 @@ func (g globalCmd) Run() error {
 		if err != nil {
 			return err
 		}
+		_ = scan.ScanJSON(bytes.NewBuffer(bodyBytes), "pushed_at", &timestampStr)
 	} else if g.Pattern == "zipball" {
 		err = scan.ScanJSON(bytes.NewBuffer(bodyBytes), "zipball_url", &dlurl)
 		if err != nil {
 			return err
 		}
+		_ = scan.ScanJSON(bytes.NewBuffer(bodyBytes), "pushed_at", &timestampStr)
 	} else {
 		ptn := regexp.MustCompile(g.Pattern)
 		for _, a := range assets {
@@ -135,6 +138,10 @@ func (g globalCmd) Run() error {
 			if ptn.FindString(dlurl) == "" {
 				dlurl = ""
 			} else {
+				tmp, found := a["updated_at"]
+				if found {
+					timestampStr = tmp.(string)
+				}
 				break
 			}
 		}
@@ -190,6 +197,15 @@ func (g globalCmd) Run() error {
 	if err != nil {
 		return err
 	}
+
+	timestamp := time.Now()
+	if timestampStr != "" {
+		ts, err := time.Parse(time.RFC3339, timestampStr)
+		if err == nil {
+			timestamp = ts
+		}
+	}
+	_ = os.Chtimes(filepath.Join(g.Dir, filename), timestamp, timestamp)
 
 	err = beeep.Notify(g.Title+"(ghrdl)", tagName+" Downloaded", "" /*"assets/information.png"*/)
 	if err != nil {
