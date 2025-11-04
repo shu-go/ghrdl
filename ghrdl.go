@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -24,21 +25,52 @@ import (
 // Version is app version
 var Version string
 
-func init() {
-	if Version == "" {
-		Version = "dev-" + time.Now().Format("20060102")
-	}
-}
-
 const (
 	versionFile = "version"
 )
 
+/*
+* Latest   : .../releases/latest
+* Tag      : .../releases/tags/{Tag}
+*
+* 1. 上記のオプションに基づき、所定のエンドポイントにアクセスする。
+* 2. Pattern の browser_download_url を持つモノを特定する。
+* 3. バージョン比較を行う
+* 	Latest -> tag_name の大小比較
+* 	Tag -> assets/digest の文字列比較（違えば最新とみなす）
+* */
 type globalCmd struct {
-	URL     string `help:"a URL of GitHub Releases page"`
+	URL    string `help:"a URL of GitHub Releases page"`
+	Latest bool   `default:"true" `
+	Tag    string `help:"exclusive with --latest"`
+
 	Pattern string `cli:"pattern=[REGEXP|tarball|zipball]" help:"download URL pattern filter"`
 	Dir     string `help:"download dest and version storage dir (default: ./{repos}"`
 	Title   string `help:"notification title (default: --dir)"`
+
+	Debug bool
+}
+
+func (g *globalCmd) Before() error {
+	if g.Debug {
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	}
+
+	if g.Tag != "" {
+		g.Latest = false
+	} else if !g.Latest {
+		return errors.New("--latest, without --tag is set")
+	}
+
+	slog.Debug(
+		"Options",
+		slog.String("URL", g.URL),
+		slog.Bool("Latest", g.Latest),
+		slog.String("Tag", g.Tag),
+		slog.String("Pattern", g.Pattern),
+	)
+
+	return nil
 }
 
 func (g globalCmd) Run() error {
@@ -74,10 +106,30 @@ func (g globalCmd) Run() error {
 	content, err := os.ReadFile(filepath.Join(g.Dir, versionFile))
 	if err == nil {
 		version = strings.TrimSpace(string(content))
+		slog.Debug(
+			"read versionFile",
+			slog.String("versionFile", versionFile),
+			slog.String("version", version),
+		)
 	}
 
-	lurl := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repos)
-	resp, err := http.Get(lurl)
+	var apiurl string
+	if g.Latest {
+		apiurl, err = url.JoinPath("https://api.github.com/repos", owner, repos, "releases/latest")
+	} else {
+		apiurl, err = url.JoinPath("https://api.github.com/repos", owner, repos, "releases/tags", g.Tag)
+	}
+	if err != nil {
+		return err
+	}
+	slog.Debug(
+		"api url",
+		slog.Bool("Latest", g.Latest),
+		slog.String("Tag", g.Tag),
+		slog.String("apiurl", apiurl),
+	)
+
+	resp, err := http.Get(apiurl)
 	if err != nil {
 		return err
 	}
@@ -89,43 +141,31 @@ func (g globalCmd) Run() error {
 	}
 	resp.Body.Close()
 
-	var tagName string
-	err = scan.ScanJSON(bytes.NewBuffer(bodyBytes), "/tag_name", &tagName)
-	if err != nil {
-		return err
-	}
-
-	// test you should download a file
-
-	if !isNewer(version, tagName) {
-		fmt.Printf("no new release (%v)\n", tagName)
-		return nil
-	}
-	println(tagName)
-
 	// determine the path to download
 
 	var timestampStr string
-	var assets []map[string]interface{}
+	var assets []map[string]any
 	err = scan.ScanJSON(bytes.NewBuffer(bodyBytes), "assets", &assets)
 	if err != nil {
 		return err
 	}
 
 	var dlurl string
-	if g.Pattern == "tarball" {
+	var digest string
+	switch g.Pattern {
+	case "tarball":
 		err = scan.ScanJSON(bytes.NewBuffer(bodyBytes), "tarball_url", &dlurl)
 		if err != nil {
 			return err
 		}
 		_ = scan.ScanJSON(bytes.NewBuffer(bodyBytes), "pushed_at", &timestampStr)
-	} else if g.Pattern == "zipball" {
+	case "zipball":
 		err = scan.ScanJSON(bytes.NewBuffer(bodyBytes), "zipball_url", &dlurl)
 		if err != nil {
 			return err
 		}
 		_ = scan.ScanJSON(bytes.NewBuffer(bodyBytes), "pushed_at", &timestampStr)
-	} else {
+	default:
 		ptn := regexp.MustCompile(g.Pattern)
 		for _, a := range assets {
 			dlurli, found := a["browser_download_url"]
@@ -137,8 +177,12 @@ func (g globalCmd) Run() error {
 			if ptn.FindString(dlurl) == "" {
 				dlurl = ""
 			} else {
-				tmp, found := a["updated_at"]
-				if found {
+				if tmp, found := a["digest"]; found {
+					if d, ok := tmp.(string); ok {
+						digest = d
+					}
+				}
+				if tmp, found := a["updated_at"]; found {
 					timestampStr = tmp.(string)
 				}
 				break
@@ -149,6 +193,30 @@ func (g globalCmd) Run() error {
 	if dlurl == "" {
 		println("no match")
 	}
+
+	// check if updated
+
+	var newversion string
+	if g.Latest {
+		err = scan.ScanJSON(bytes.NewBuffer(bodyBytes), "/tag_name", &newversion)
+		if err != nil {
+			return err
+		}
+
+		// test you should download a file
+
+		if !isNewer(version, newversion) {
+			fmt.Printf("no new release (%v)\n", newversion)
+			return nil
+		}
+	} else { // specific g.Tag
+		if digest == version {
+			fmt.Printf("no new release (%v)\n", newversion)
+			return nil
+		}
+		newversion = digest
+	}
+	println(newversion)
 
 	// fetch the file
 
@@ -166,9 +234,10 @@ func (g globalCmd) Run() error {
 
 	// store
 	filename := path.Base(dlurl)
-	if g.Pattern == "tarball" {
+	switch g.Pattern {
+	case "tarball":
 		filename += ".tar.gz"
-	} else if g.Pattern == "zipball" {
+	case "zipball":
 		filename += ".zip"
 	}
 	file, err := os.Create(filepath.Join(g.Dir, filename))
@@ -179,11 +248,12 @@ func (g globalCmd) Run() error {
 
 	bar := progressbar.New(100)
 
+	listener := func(p int64) {
+		bar.Add(1)
+	}
 	progreader := progio.NewReader(
 		resp.Body,
-		func(p int64) {
-			bar.Add(1)
-		},
+		listener,
 		progio.Percent(resp.ContentLength, 1),
 	)
 
@@ -206,7 +276,7 @@ func (g globalCmd) Run() error {
 	}
 	_ = os.Chtimes(filepath.Join(g.Dir, filename), timestamp, timestamp)
 
-	err = beeep.Notify(g.Title+"(ghrdl)", tagName+" Downloaded", "" /*"assets/information.png"*/)
+	err = beeep.Notify(g.Title+"(ghrdl)", newversion+" Downloaded", "" /*"assets/information.png"*/)
 	if err != nil {
 		return err
 	}
