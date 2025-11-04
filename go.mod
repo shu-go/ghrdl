@@ -1,8 +1,6 @@
 module github.com/shu-go/ghrdl
 
-go 1.24
-
-toolchain go1.24.3
+go 1.25.3
 
 require (
 	github.com/gen2brain/beeep v0.11.1
