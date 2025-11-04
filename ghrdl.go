@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -72,7 +71,7 @@ func (g globalCmd) Run() error {
 	}
 
 	var version string
-	content, err := ioutil.ReadFile(filepath.Join(g.Dir, versionFile))
+	content, err := os.ReadFile(filepath.Join(g.Dir, versionFile))
 	if err == nil {
 		version = strings.TrimSpace(string(content))
 	}
@@ -193,7 +192,7 @@ func (g globalCmd) Run() error {
 		return fmt.Errorf("copy content: %v", err)
 	}
 
-	err = ioutil.WriteFile(filepath.Join(g.Dir, versionFile), []byte(tagName), os.ModePerm)
+	err = os.WriteFile(filepath.Join(g.Dir, versionFile), []byte(newversion), os.ModePerm)
 	if err != nil {
 		return err
 	}
