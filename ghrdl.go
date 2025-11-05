@@ -210,11 +210,11 @@ func (g globalCmd) Run() error {
 			return nil
 		}
 	} else { // specific g.Tag
-		if digest == version {
+		newversion = digest
+		if newversion == version {
 			fmt.Printf("no new release (%v)\n", newversion)
 			return nil
 		}
-		newversion = digest
 	}
 	println(newversion)
 
