@@ -46,6 +46,8 @@ github.com/shu-go/gotwant v0.0.0-20190920074605-b4f19c0bac91 h1:nwDc3kHbf9scf1UZ
 github.com/shu-go/gotwant v0.0.0-20190920074605-b4f19c0bac91/go.mod h1:FZepfqvib0mXjHiaQPTv0RUD5QMpMA/FHLfBQjZRRQg=
 github.com/shu-go/progio v0.0.0-20190822042334-2f5cf6a8a04c h1:KAe9zSDYc2KO7es/du1Ck/DZOoVLrpQMMXrKB6ZNcB4=
 github.com/shu-go/progio v0.0.0-20190822042334-2f5cf6a8a04c/go.mod h1:ikApHo7IPnoQ7zH0BSPbK4Sev0lIsWlAKLjuBmzEkmg=
+github.com/shu-go/progio v0.2.0 h1:igKBo+Vla2ct7YWbifuToVriXmDoAD3W+TtbNbwHpo4=
+github.com/shu-go/progio v0.2.0/go.mod h1:nNOSOnLaeEzCoiMLrE7/8JnDcrG3q8Iiw9rrFidLsyg=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
 github.com/stretchr/objx v0.5.0/go.mod h1:Yh+to48EsGEfYuaHDzXPcE3xhTkx73EhmCGUpEOglKo=

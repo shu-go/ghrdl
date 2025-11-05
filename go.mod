@@ -7,7 +7,7 @@ require (
 	github.com/mattn/go-scan v0.0.0-20200228002420-2250e6e52487
 	github.com/schollz/progressbar v1.0.0
 	github.com/shu-go/gli v1.5.7
-	github.com/shu-go/progio v0.0.0-20190822042334-2f5cf6a8a04c
+	github.com/shu-go/progio v0.2.0
 )
 
 require (
